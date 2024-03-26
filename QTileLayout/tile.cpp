@@ -1,11 +1,13 @@
 #include "tile.h"
+#include "customshadoweffect.h"
 #include "qtilelayout.h"
 #include <QDebug>
 
+// The basic component of a tileLayout
 Tile::Tile(QTileLayout *tileLayout, int fromRow, int fromColumn, int rowSpan, int columnSpan, int verticalSpan, int horizontalSpan, QWidget *parent)
-    : QLabel(parent),
+    : QWidget(parent),
     tileLayout(tileLayout),
-    originTileLayout(tileLayout),
+    originTileLayout(this->tileLayout),
     fromRow(fromRow),
     fromColumn(fromColumn),
     rowSpan(rowSpan),
@@ -19,15 +21,22 @@ Tile::Tile(QTileLayout *tileLayout, int fromRow, int fromColumn, int rowSpan, in
     dragInProcess(false),
     currentTileNumber(0)
 {
-    layout = new QVBoxLayout(this);
-    layout->setSpacing(0);
-    layout->setContentsMargins(0, 0, 0, 0);
-    setAcceptDrops(true);
-    setMouseTracking(true);
-    setLayout(layout);
+    this->layout = new QVBoxLayout();
+    this->layout->setSpacing(0);
+    this->layout->setContentsMargins(0, 0, 0, 0);
+
+    this->mouseMovePos = nullptr;
+    this->updateSizeLimit();
+    this->setAcceptDrops(true);
+    this->setMouseTracking(true);
+    this->setLayout(layout);
+
+    // connect(this, &Tile::tileMoved, tileLayout, &QTileLayout::tileMoved);
+    connect(this, &Tile::tileMoved, this, &Tile::tileHasBeenMoved);
 
 }
 
+// Changes the tile size
 void Tile::updateSize(int fromRow, int fromColumn, int rowSpan, int columnSpan, int verticalSpan, int horizontalSpan) {
     this->fromRow = (fromRow != -1) ? fromRow : this->fromRow;
     this->fromColumn = (fromColumn != -1) ? fromColumn : this->fromColumn;
@@ -35,45 +44,53 @@ void Tile::updateSize(int fromRow, int fromColumn, int rowSpan, int columnSpan, 
     this->columnSpan = (columnSpan != -1) ? columnSpan : this->columnSpan;
     this->verticalSpan = (verticalSpan != -1) ? verticalSpan : this->verticalSpan;
     this->horizontalSpan = (horizontalSpan != -1) ? horizontalSpan : this->horizontalSpan;
-    updateSizeLimit();
+    this->updateSizeLimit();
 }
 
+// Adds a widget in the tile
 void Tile::addWidget(QWidget *widget) {
     layout->addWidget(widget);
     this->widget = widget;
     filled = true;
 }
 
+// Returns the tile from row
 int Tile::getFromRow() const {
     return fromRow;
 }
 
+// Returns the tile from column
 int Tile::getFromColumn() const {
     return fromColumn;
 }
 
+// Returns the tile row span
 int Tile::getRowSpan() const {
     return rowSpan;
 }
 
+// Returns the tile column span
 int Tile::getColumnSpan() const {
     return columnSpan;
 }
 
+// Returns True if there is a widget in the tile, else False
 bool Tile::isFilled() const {
     return filled;
 }
 
+// Changes the tile background color
 void Tile::changeColor(const QPalette &color) {
     setAutoFillBackground(true);
     setPalette(QPalette(color));
 }
 
+// Actions to do when the mouse is moved
 void Tile::mouseMoveEvent(QMouseEvent *event) {
     if (event->buttons() == Qt::LeftButton) {
         // Adjust offset from clicked point to origin of widget
-        if (mouseMovePos && !dragInProcess && lock == QPoint()) {
-            QPoint globalPos = event->globalPosition().toPoint();
+        if (mouseMovePos && !dragInProcess && lock.isNull()) {
+            QPoint globalPos = event->globalPos();
             QPoint lastPos = mapToGlobal(*mouseMovePos);
             // Calculate the difference when moving the mouse
             QPoint diff = globalPos - lastPos;
@@ -96,7 +113,7 @@ void Tile::mouseMoveEvent(QMouseEvent *event) {
 
     if (!filled) {
         setCursor(QCursor(tileLayout->getCursorIdle()));
-    } else if (lock == QPoint()) {
+    } else if (lock.isNull()) {
         bool westCondition = 0 <= event->pos().x() && event->pos().x() < resizeMargin;
         bool eastCondition = width() >= event->pos().x() && event->pos().x() > width() - resizeMargin;
         bool northCondition = 0 <= event->pos().y() && event->pos().y() < resizeMargin;
@@ -112,6 +129,7 @@ void Tile::mouseMoveEvent(QMouseEvent *event) {
             setCursor(QCursor(tileLayout->getCursorIdle()));
         }
     } else {
+        // highlight tiles that are going to be merged in the resizing
         int x = event->pos().x();
         int y = event->pos().y();
         int tileNumber = getResizeTileNumber(x, y);
@@ -126,6 +144,7 @@ void Tile::mouseMoveEvent(QMouseEvent *event) {
     QWidget::mouseMoveEvent(event);
 }
 
+// Actions to do when the mouse button is pressed
 void Tile::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {
         mouseMovePos = new QPoint(event->pos());
@@ -142,7 +161,7 @@ void Tile::mousePressEvent(QMouseEvent *event) {
             lock = QPoint(0, 1);  // 'south'
         }
 
-        if (lock != QPoint()) {
+        if (!lock.isNull()) {
             tileLayout->changeTilesColor("resize");
         }
     } else {
@@ -153,8 +172,9 @@ void Tile::mousePressEvent(QMouseEvent *event) {
     QWidget::mousePressEvent(event);
 }
 
+// Actions to do when the mouse button is released
 void Tile::mouseReleaseEvent(QMouseEvent *event) {
-    if (lock == QPoint()) {
+    if (lock.isNull()) {
         QWidget::mouseReleaseEvent(event);
         return;
     }
@@ -167,7 +187,6 @@ void Tile::mouseReleaseEvent(QMouseEvent *event) {
     tileLayout->changeTilesColor("idle");
     currentTileNumber = 0;
     lock = QPoint();
-
     QWidget::mouseReleaseEvent(event);
 }
 
@@ -189,23 +208,24 @@ void Tile::dropEvent(QDropEvent *event) {
         dropData["column_span"].toInt()
         );
 
-    emit tileMoved(
-        widget,
-        dropData["id"].toString(),
-        tileLayout->objectName(),
-        dropData["from_row"].toInt(),
-        dropData["from_column"].toInt(),
-        fromRow - dropData["row_offset"].toInt(),
-        fromColumn - dropData["column_offset"].toInt()
-        );
+    // emit tileMoved(
+    //     widget,
+    //     dropData["id"].toString(),
+    //     tileLayout->getId(),
+    //     dropData["from_row"].toInt(),
+    //     dropData["from_column"].toInt(),
+    //     fromRow - dropData["row_offset"].toInt(),
+    //     fromColumn - dropData["column_offset"].toInt()
+    //     );
     event->acceptProposedAction();
 }
 
+// Prepares data for the drag and drop process
 QDrag *Tile::prepareDropData(QMouseEvent *event) {
     QDrag *drag = new QDrag(this);
     QMimeData *dropData = new QMimeData();
     QJsonObject data;
-    data["id"] = tileLayout->objectName();
+    data["id"] = tileLayout->getId(); // this is string than we convert it again in uuid
     data["from_row"] = fromRow;
     data["from_column"] = fromColumn;
     data["row_span"] = rowSpan;
@@ -215,11 +235,25 @@ QDrag *Tile::prepareDropData(QMouseEvent *event) {
 
     QByteArray dataBytes = QJsonDocument(data).toJson();
     dropData->setData("TileData", dataBytes);
+
+    CustomShadowEffect *bodyShadow = new CustomShadowEffect(widget);
+    double dist = 10.0;
+    bodyShadow->setBlurRadius(20.0);
+    bodyShadow->setDistance(dist);
+    bodyShadow->setColor(QColor(0, 0, 0, 80));
+    widget->setAutoFillBackground(true);
+    widget->setGraphicsEffect(bodyShadow);
+
+    QPixmap dragIcon = widget->grab(widget->rect().adjusted(-dist, -dist, dist, dist));
+
+    drag->setPixmap(dragIcon);
     drag->setMimeData(dropData);
     drag->setHotSpot(event->pos() - rect().topLeft());
+
     return drag;
 }
 
+// Manages the drag and drop process
 void Tile::dragAndDropProcess(QDrag *drag) {
     dragInProcess = true;
     int previousRowSpan = rowSpan;
@@ -238,18 +272,18 @@ void Tile::dragAndDropProcess(QDrag *drag) {
         }
     }
 
-    if (drag->exec() != Qt::IgnoreAction) {
+    if (drag->exec() == Qt::IgnoreAction) {
         removeWidget();
-        QWidget *widgetToDrop = tileLayout->getWidgetToDrop();
+        QWidget *widget = tileLayout->getWidgetToDrop();
         tileLayout->addWidget(
-            widgetToDrop,
+            widget,
             fromRow,
             fromColumn,
             previousRowSpan,
             previousColumnSpan
             );
         if (tileLayout->getFocus()) {
-            widgetToDrop->setFocus();
+            widget->setFocus();
         }
     }
 
@@ -258,21 +292,27 @@ void Tile::dragAndDropProcess(QDrag *drag) {
     dragInProcess = false;
 }
 
+// Checks if this tile can accept the drop
 bool Tile::isDropPossible(QDropEvent *event) {
     QByteArray tileData = event->mimeData()->data("TileData");
-    QJsonParseError jsonError;
-    QJsonObject dropData = QJsonDocument::fromJson(tileData, &jsonError).object();
+    QJsonDocument dropData;
 
-    if (jsonError.error != QJsonParseError::NoError) {
+    try {
+        dropData = QJsonDocument::fromJson(tileData);
+    } catch (const QJsonParseError &error) {
+        qDebug() << "JSON parsing error:" << error.errorString();
         return false;
     }
 
+    if (dropData.isNull() || !dropData.isObject())
+        return false;
+
     QMap<QUuid, QTileLayout *> mapTileLayout = tileLayout->getLinkedLayout();
 
-    if (!mapTileLayout.contains(dropData["id"].toString())) {
+    if (!mapTileLayout.contains(QUuid(dropData["id"].toString()))) {
         return false;
     } else {
-        originTileLayout = mapTileLayout.value(dropData["id"].toString());
+        originTileLayout = mapTileLayout.value(QUuid(dropData["id"].toString()));
     }
 
     QMap<QUuid, QTileLayout *> mapOriginTileLayout = originTileLayout->getLinkedLayout();
@@ -292,6 +332,7 @@ bool Tile::isDropPossible(QDropEvent *event) {
         );
 }
 
+// Finds the tile number when resizing
 int Tile::getResizeTileNumber(int x, int y) {
     int dirX = lock.x();
     int dirY = lock.y();
@@ -303,6 +344,7 @@ int Tile::getResizeTileNumber(int x, int y) {
     return static_cast<int>((x * (dirX != 0) + y * (dirY != 0) + (span / 2) - span * tileSpan * ((dirX + dirY) == 1)) / (span + spacing));
 }
 
+// Removes the tile widget
 void Tile::removeWidget() {
     layout->removeWidget(widget);
     delete widget;
@@ -310,9 +352,10 @@ void Tile::removeWidget() {
     filled = false;
 }
 
+// Refreshes the tile size limit
 void Tile::updateSizeLimit() {
-    setFixedHeight(rowSpan * verticalSpan + (rowSpan - 1) * layout->spacing());
-    setFixedWidth(columnSpan * horizontalSpan + (columnSpan - 1) * layout->spacing());
+    setFixedHeight((rowSpan * verticalSpan) + ((rowSpan - 1) * tileLayout->verticalSpacing()));
+    setFixedWidth((columnSpan * horizontalSpan) + ((columnSpan - 1) * tileLayout->horizontalSpacing()));
 }
 
 void Tile::tileHasBeenMoved(QWidget *widget, const QString &from_layout_id, const QString &to_layout_id, int from_row, int from_column, int to_row, int to_column) {

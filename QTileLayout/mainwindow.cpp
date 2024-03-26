@@ -52,18 +52,19 @@ void Label::keyPressEvent(QKeyEvent *ev) {
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
 
-    ui->setupUi(this);
+    // ui->setupUi(this);
     font = QFont("Latin", 15);
     font.setBold(true);
 
     int row_number = 6;
-    int column_number = 4;
+    int column_number = 5;
+
     int vertical_span = 100;
     int horizontal_span = 150;
     int spacing = 5;
-    bool static_layout = true;
+    bool static_layout = false;
 
-    tile_layout = new QTileLayout(row_number, column_number, vertical_span, horizontal_span, spacing, spacing, this);
+    tile_layout = new QTileLayout(row_number, column_number, vertical_span, horizontal_span, spacing, spacing);
 
     tile_layout->acceptDragAndDrop(true);
     tile_layout->acceptResizing(true);
@@ -78,16 +79,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     tile_layout->setColorDragAndDrop(QColor(211, 211, 211));
     tile_layout->setColorEmptyCheck(QColor(150, 150, 150));
 
-    for (int i_row = 0; i_row < row_number - 2; ++i_row) {
+    for (int i_row = 0; i_row < row_number - 3; ++i_row) {
         for (int i_column = 0; i_column < column_number; ++i_column) {
-            QLabel* wdg = spawnWidget();
-            tile_layout->addWidget(wdg, i_row, i_column);
+            tile_layout->addWidget(spawnWidget(), i_row, i_column);
         }
     }
 
     tile_layout->addWidget(spawnWidget(), row_number - 2, 1, 2, 2);
 
-    QLabel* last_widget = spawnWidget();
+    Label* last_widget = spawnWidget();
     tile_layout->addWidget(last_widget, row_number - 1, 0, 1, 1);
     tile_layout->removeWidget(last_widget);
 
@@ -100,9 +100,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     qDebug() << "Layout horizontal spacing:" << tile_layout->horizontalSpacing();
     qDebug() << "Number of widget:" << tile_layout->widgetList().size();
 
-    tile_layout->setVerticalSpacing(5);
-    tile_layout->setHorizontalSpacing(5);
-    tile_layout->setRowsMinimumHeight(150);
+    tile_layout->setVerticalSpacing(spacing);
+    tile_layout->setHorizontalSpacing(spacing);
+    tile_layout->setRowsMinimumHeight(100);
     tile_layout->setColumnsMinimumWidth(150);
     tile_layout->setRowsHeight(100);
     tile_layout->setColumnsWidth(150);
@@ -114,7 +114,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     tile_layout->addRows(1);
     tile_layout->addColumns(1);
-    tile_layout->removeRows(1);
+    // tile_layout->removeRows(1);
     // tile_layout->removeColumns(1);
 
     ui->centralwidget = new QWidget;
@@ -133,10 +133,41 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
         int vertical_margins = tile_layout->contentsMargins().top() + tile_layout->contentsMargins().bottom();
         int horizontal_margins = tile_layout->contentsMargins().left() + tile_layout->contentsMargins().right();
-        scroll->setMinimumHeight(row_number * vertical_span + (row_number - 1) * spacing + vertical_margins + 2);
-        scroll->setMinimumWidth(column_number * horizontal_span + (column_number - 1) * spacing + horizontal_margins + 2);
+        scroll->setMinimumHeight((row_number * vertical_span) + ((row_number - 1) * spacing) + vertical_margins + 2);
+        scroll->setMinimumWidth((column_number * horizontal_span) + ((column_number - 1) * spacing) + horizontal_margins + 2);
     }
 
+    QToolBar* pToolBar = new QToolBar(this);
+    addToolBar(pToolBar);
+
+    m_pActAdd = new QAction(this);
+    m_pActAdd->setIcon(QIcon(":/resources/add.png"));
+    connect(m_pActAdd, &QAction::triggered, [this]() {
+    //     // Codice da eseguire quando il pulsante viene premuto
+         tile_layout->addColumns(1); // Supponiamo di voler aggiungere una colonna alla volta
+     });
+
+    m_pActRemove = new QAction(this);
+    m_pActRemove->setIcon(QIcon(":/resources/remove.png"));
+    connect(m_pActRemove, &QAction::triggered, [this]() {
+        //     // Codice da eseguire quando il pulsante viene premuto
+        tile_layout->removeColumns(1); // Supponiamo di voler aggiungere una colonna alla volta
+    });
+
+    pToolBar->addAction(m_pActAdd);
+    pToolBar->addAction(m_pActRemove);
+
+    // QPushButton * addColumn = new QPushButton("Add Column", this);
+    // // connect(addColumn, &QPushButton::clicked, tile_layout, &QTileLayout::addColumns);
+    // connect(addColumn, &QPushButton::clicked, [this]() {
+    //     // Codice da eseguire quando il pulsante viene premuto
+    //     tile_layout->addColumns(1); // Supponiamo di voler aggiungere una colonna alla volta
+    // });
+}
+
+MainWindow::~MainWindow()
+{
+    delete ui;
 }
 
 void MainWindow::tileHasBeenMoved(QWidget *widget, const QString &from_layout_id, const QString &to_layout_id,
@@ -154,7 +185,7 @@ void MainWindow::centralWidgetResize(QResizeEvent *event) {
     tile_layout->updateGlobalSize(event);
 }
 
-QLabel* MainWindow::spawnWidget() {
+Label* MainWindow::spawnWidget() {
     Label *label = new Label(this);
     label->setText(QString(possible_text[QRandomGenerator::global()->bounded(possible_text.size())]));
     label->setObjectName(label->text());

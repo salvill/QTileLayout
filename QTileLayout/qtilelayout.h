@@ -21,10 +21,6 @@ public:
 
     void addWidget(QWidget *widget, int fromRow, int fromColumn, int rowSpan = 1, int columnSpan = 1);
     void removeWidget(QWidget *widget);
-    void addRows(int rowNumber);
-    void addColumns(int columnNumber);
-    void removeRows(int rowNumber);
-    void removeColumns(int columnNumber);
     void acceptDragAndDrop(bool value);
     void acceptResizing(bool value);
     void setCursorIdle(Qt::CursorShape value);
@@ -71,6 +67,12 @@ public:
     QMap<QUuid, QTileLayout *> getLinkedLayout() const;
     void updateGlobalSize(QResizeEvent *newSize);
 
+public slots:
+    void addRows(int rowNumber);
+    void addColumns(int columnNumber);
+    void removeRows(int rowNumber);
+    void removeColumns(int columnNumber);
+
 signals:
     void tileResized(QWidget *widget, int fromRow, int fromColumn, int rowSpan, int columnSpan);
     void tileMoved(QWidget *widget, QString str, QString str2, int fromRow, int fromColumn, int rowSpan, int columnSpan);
@@ -87,7 +89,6 @@ private:
     void mergeTiles(Tile *tile, int fromRow, int fromColumn, int rowSpan, int columnSpan, QList<QPoint> tilesToMerge);
     void splitTiles(Tile *tile, int fromRow, int fromColumn, int rowSpan, int columnSpan, QList<QPoint> tilesToSplit);
     Tile* createTile(int fromRow, int fromColumn, int rowSpan = 1, int columnSpan = 1, bool updateTileMap = false);
-    // QSharedPointer<Tile> createTile(int fromRow, int fromColumn, int rowSpan = 1, int columnSpan = 1, bool updateTileMap = false);
     std::tuple<QList<QPoint>, bool, int, int, int, int> getTilesToBeResized(Tile* tile, QPoint direction, int fromRow, int fromColumn, int tileNumber);
     std::tuple<int, QList<QPoint> > getTilesToSplit(QPoint direction, int fromRow, int fromColumn, int tileNumber);
     std::tuple<int, QList<QPoint> > getTilesToMerge(QPoint direction, int fromRow, int fromColumn, int tileNumber);
@@ -107,7 +108,6 @@ private:
     bool focus;
     QWidget *widgetToDrop;
     QList<QList<Tile*>> tileMap;
-    // QList<QList<QSharedPointer<Tile>>> tileMap;
     QMap<QString, QList<QWidget *>> widgetTileCouple;
     QMap<QUuid, QTileLayout*> linkedLayout;
     QUuid id;
@@ -116,7 +116,8 @@ private:
     Qt::CursorShape cursorResizeHorizontal;
     Qt::CursorShape cursorResizeVertical;
     QMap<QString, QColor> colorMap;
-static QVector<int> flattenList(const QVector<QVector<int>>& toFlatten);
+
+static QList<QVariant> flattenList(const QList<QList<QVariant>>& toFlatten);
 };
 
 #endif // QTILELAYOUT_H

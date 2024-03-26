@@ -14,7 +14,7 @@ class Label : public QLabel {
     Q_OBJECT
 
 public:
-    Label(QWidget *parent = nullptr);
+    explicit Label(QWidget *parent = nullptr);
     virtual ~Label();
 
 protected:
@@ -28,6 +28,7 @@ class MainWindow : public QMainWindow {
 
 public:
     MainWindow(QWidget *parent = nullptr);
+    ~MainWindow();
 
 private slots:
     void tileHasBeenMoved(QWidget *widget, const QString &from_layout_id, const QString &to_layout_id,
@@ -36,13 +37,15 @@ private slots:
     void centralWidgetResize(QResizeEvent *event);
 
 private:
-    QLabel* spawnWidget();
+    Label *spawnWidget();
     QPalette spawnColor();
     // QWidget *central_widget;
     QTileLayout *tile_layout;
     QFont font;
     QScrollArea *scroll;
     Ui::MainWindow *ui;
+    QAction* m_pActRemove = nullptr;
+    QAction* m_pActAdd = nullptr;
 
 };
 

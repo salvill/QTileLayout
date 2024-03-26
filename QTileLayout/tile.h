@@ -15,7 +15,7 @@
 
 class QTileLayout;
 
-class Tile : public QListView {
+class Tile : public QWidget {
     Q_OBJECT
 
 public:

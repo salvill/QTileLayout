@@ -1,8 +1,5 @@
-#include "qtilelayout.h"
+ #include "qtilelayout.h"
 #include "qdebug.h"
-
-#define MAX_ROW 50
-#define MAX_COL 50
 
 QTileLayout::QTileLayout(int rowNumber, int columnNumber, int verticalSpan, int horizontalSpan,
                          int verticalSpacing, int horizontalSpacing, QWidget *parent)
@@ -11,11 +8,9 @@ QTileLayout::QTileLayout(int rowNumber, int columnNumber, int verticalSpan, int 
     minVerticalSpan(verticalSpan), minHorizontalSpan(horizontalSpan),
     dragAndDrop(true), resizable(true), focus(false), widgetToDrop(nullptr)
 {
-
-
     // Set spacing
-    setVerticalSpacing(verticalSpacing);
-    setHorizontalSpacing(horizontalSpacing);
+    QGridLayout::setVerticalSpacing(verticalSpacing);
+    QGridLayout::setHorizontalSpacing(horizontalSpacing);
 
     // Logic parameters
     dragAndDrop = true;
@@ -23,23 +18,11 @@ QTileLayout::QTileLayout(int rowNumber, int columnNumber, int verticalSpan, int 
     focus = false;
     widgetToDrop = nullptr;
 
-    // self.tileMap = []
-    // Popola la tileMap con QSharedPointer a Tile
-    for (int row = 0; row < MAX_ROW; ++row) {
-        // QList<QSharedPointer<Tile>> rowTiles;
-         QList<Tile *> rowTiles;
-        for (int col = 0; col < MAX_COL; ++col) {
-            // Crea un nuovo oggetto Tile
-            Tile* tile = new Tile(nullptr, row, col, 1, 1, verticalSpan, horizontalSpan);
-            // Crea un QSharedPointer per il Tile e aggiungilo alla lista della riga
-            // QSharedPointer<Tile> sharedTile(tile);
-            rowTiles.append(tile);
-        }
-        // Aggiungi la lista dei Tile della riga alla tileMap
-        tileMap.append(rowTiles);
-    }
-
-    // self.widgetTileCouple = {'widget': [], 'tile': []}
+    tileMap = {};
+    widgetTileCouple = {
+        { "widget", QList<QWidget *>() },
+        { "tile"  , QList<QWidget *>() }
+    };
 
     id = QUuid::createUuid();
     // id = QUuid::createUuid().toString();
@@ -52,26 +35,26 @@ QTileLayout::QTileLayout(int rowNumber, int columnNumber, int verticalSpan, int 
     cursorResizeVertical = Qt::SizeVerCursor;
 
     colorMap = {
-        {"drag_and_drop",   QColor(211, 211, 211)},
+        {"drag_and_drop",   QColor(255, 211, 211)},
         {"idle",            QColor(240, 240, 240)},
-        {"resize",          QColor(211, 211, 211)},
+        {"resize",          QColor(211, 255, 211)},
         {"empty_check",     QColor(150, 150, 150)}
     };
 
     setRowStretch(rowNumber, 1);
     setColumnStretch(columnNumber, 1);
 
-
     createTileMap();
 
 }
 
+//adds a widget in the layout: works like the addWidget method in a gridLayout
 void QTileLayout::addWidget(QWidget *widget, int fromRow, int fromColumn, int rowSpan, int columnSpan)
 {
-    // Q_ASSERT(!widgetList().contains(widget));
-    // Q_ASSERT(!isAreaEmpty(fromRow, fromColumn, rowSpan, columnSpan));
-    if( !widgetTileCouple["widget"].contains(widget)
-        && isAreaEmpty(fromRow, fromColumn, rowSpan, columnSpan))
+    Q_ASSERT(!widgetList().contains(widget));
+    Q_ASSERT(isAreaEmpty(fromRow, fromColumn, rowSpan, columnSpan));
+    // if( !widgetTileCouple["widget"].contains(widget)
+    //     && isAreaEmpty(fromRow, fromColumn, rowSpan, columnSpan))
     {
         // Gets the tile at the specified position
         Tile* tile = tileMap[fromRow][fromColumn];
@@ -79,19 +62,11 @@ void QTileLayout::addWidget(QWidget *widget, int fromRow, int fromColumn, int ro
         widgetTileCouple["widget"].append(widget);
         widgetTileCouple["tile"].append(tile);
 
-        // Tile *tile = tileMap.at(fromRow).at(fromColumn);
-        // Tile *tile = tileMap.at(fromRow).at(fromColumn);
-        // QList<QPoint> tilesToMerge;
-        // QList<QPoint> tilesToRecycle;
-
         widgetToDrop = widget;
         widget->setMouseTracking(true);
         tile->addWidget(widget);
 
-        widgetTileCouple["widget"].append(widget);
-        widgetTileCouple["tile"].append(tile);
-
-
+        // If the widget is on more than 1 tile, the tiles must be merged
         if (rowSpan > 1 || columnSpan > 1) {
             QList<QPoint> tilesToMerge;
             for (int row = 0; row < rowSpan; ++row)
@@ -100,16 +75,16 @@ void QTileLayout::addWidget(QWidget *widget, int fromRow, int fromColumn, int ro
 
             mergeTiles(tile, fromRow, fromColumn, rowSpan, columnSpan, tilesToMerge.mid(1));
         }
-        qDebug() << "Widget created: " << widget->objectName() << "row: "<< fromRow << "col: " <<fromColumn;
+        // qDebug() << "Widget created: " << widget->objectName() << "row: "<< fromRow << "col: " <<fromColumn;
     }
 
 
 }
 
-void QTileLayout::removeWidget(QWidget *widget)
-{
+// Removes the given widget
+void QTileLayout::removeWidget(QWidget *widget) {
     // Q_ASSERT(widgetList().contains(widget));
-    if (widgetTileCouple["widget"].contains(widget))
+    if (widgetList().contains(widget))
     {
         int index = widgetTileCouple["widget"].indexOf(widget);
         Tile *tile = dynamic_cast<Tile*>(widgetTileCouple.value("tile").at(index));
@@ -126,16 +101,17 @@ void QTileLayout::removeWidget(QWidget *widget)
 
         widget->setMouseTracking(false);
         splitTiles(tile, fromRow, fromColumn, rowSpan, columnSpan, tilesToSplit);
-        this->hardSplitTiles(fromRow, fromColumn, tilesToSplit);
+        hardSplitTiles(fromRow, fromColumn, tilesToSplit);
         widgetTileCouple["widget"].removeAt(index);
         widgetTileCouple["tile"].removeAt(index);
         changeTilesColor("idle");
+
+        qDebug() << "Widget removed: " << widget->objectName() << "row: "<< fromRow << "col: " <<fromColumn;
     }
 
 }
 
-void QTileLayout::addRows(int rowNumber)
-{
+void QTileLayout::addRows(int rowNumber) {
     // Q_ASSERT(rowNumber > 0);
     if(rowNumber > 0)
     {
@@ -152,11 +128,10 @@ void QTileLayout::addRows(int rowNumber)
         this->rowNumber += rowNumber;
         setRowStretch(this->rowNumber, 1);
     }
-
 }
 
-void QTileLayout::addColumns(int columnNumber)
-{
+// Adds columns at the right of the layout
+void QTileLayout::addColumns(int columnNumber) {
     // Q_ASSERT(columnNumber > 0);
     if(columnNumber > 0)
     {
@@ -171,18 +146,19 @@ void QTileLayout::addColumns(int columnNumber)
 
         this->columnNumber += columnNumber;
         setColumnStretch(this->columnNumber, 1);
+        QGridLayout::update();
+        qDebug() << "Added column";
     }
 }
 
-void QTileLayout::removeRows(int rowNumber)
-{
+void QTileLayout::removeRows(int rowNumber) {
     // Q_ASSERT(isAreaEmpty(this->rowNumber - rowNumber, 0, rowNumber, columnNumber));
-    if (isAreaEmpty(this->rowNumber - rowNumber, 0, rowNumber, columnNumber))
+    if (isAreaEmpty(this->rowNumber - rowNumber, 0, rowNumber, this->columnNumber))
     {
         for (int row = this->rowNumber - rowNumber; row < this->rowNumber; ++row)
         {
             for (int column = 0; column < columnNumber; ++column) {
-                removeWidget(tileMap[row][column]);
+                QGridLayout::removeWidget(tileMap[row][column]);
                 tileMap[row][column]->deleteLater();
             }
             setRowMinimumHeight(row, 0);
@@ -190,19 +166,18 @@ void QTileLayout::removeRows(int rowNumber)
         }
 
         this->rowNumber -= rowNumber;
-        tileMap.erase(tileMap.begin() + (this->rowNumber - rowNumber), tileMap.end());
+        tileMap.erase(tileMap.begin() + this->rowNumber, tileMap.end());
     }
 
 }
 
-void QTileLayout::removeColumns(int columnNumber)
-{
+void QTileLayout::removeColumns(int columnNumber) {
     // Q_ASSERT(isAreaEmpty(0, this->columnNumber - columnNumber, rowNumber, columnNumber));
-    if (isAreaEmpty(0, this->columnNumber - columnNumber, rowNumber, columnNumber))
+    if (isAreaEmpty(0, this->columnNumber - columnNumber, this->rowNumber, columnNumber))
     {
         for (int column = this->columnNumber - columnNumber; column < this->columnNumber; ++column) {
             for (int row = 0; row < rowNumber; ++row) {
-                removeWidget(tileMap[row][column]);
+                QGridLayout::removeWidget(tileMap[row][column]);
                 tileMap[row][column]->deleteLater();
             }
 
@@ -212,90 +187,74 @@ void QTileLayout::removeColumns(int columnNumber)
 
         this->columnNumber -= columnNumber;
         for (int row = 0; row < rowNumber; ++row) {
-            tileMap[row].erase(tileMap[row].begin() + (this->columnNumber - columnNumber), tileMap[row].end());
+            tileMap[row].erase(tileMap[row].begin() + this->columnNumber, tileMap[row].end());
         }
     }
 
 }
 
-void QTileLayout::acceptDragAndDrop(bool value)
-{
+void QTileLayout::acceptDragAndDrop(bool value) {
     dragAndDrop = value;
 }
 
-void QTileLayout::acceptResizing(bool value)
-{
+void QTileLayout::acceptResizing(bool value) {
     resizable = value;
 }
 
-void QTileLayout::setCursorIdle(Qt::CursorShape value)
-{
+void QTileLayout::setCursorIdle(Qt::CursorShape value) {
     cursorIdle = value;
 }
 
-void QTileLayout::setCursorGrab(Qt::CursorShape value)
-{
+void QTileLayout::setCursorGrab(Qt::CursorShape value) {
     cursorGrab = value;
 }
 
-void QTileLayout::setCursorResizeHorizontal(Qt::CursorShape value)
-{
+void QTileLayout::setCursorResizeHorizontal(Qt::CursorShape value) {
     cursorResizeHorizontal = value;
 }
 
-void QTileLayout::setCursorResizeVertical(Qt::CursorShape value)
-{
+void QTileLayout::setCursorResizeVertical(Qt::CursorShape value) {
     cursorResizeVertical = value;
 }
 
-void QTileLayout::setColorIdle(QColor color)
-{
+void QTileLayout::setColorIdle(QColor color) {
     colorMap["idle"] = color;
     changeTilesColor("idle");
 }
 
-void QTileLayout::setColorResize(QColor color)
-{
+void QTileLayout::setColorResize(QColor color) {
     colorMap["resize"] = color;
 }
 
-void QTileLayout::setColorDragAndDrop(QColor color)
-{
+void QTileLayout::setColorDragAndDrop(QColor color) {
     colorMap["drag_and_drop"] = color;
 }
 
-void QTileLayout::setColorEmptyCheck(QColor color)
-{
+void QTileLayout::setColorEmptyCheck(QColor color) {
     colorMap["empty_check"] = color;
 }
 
-int QTileLayout::rowCount() const
-{
+int QTileLayout::rowCount() const {
     return rowNumber;
 }
 
-int QTileLayout::columnCount() const
-{
+int QTileLayout::columnCount() const {
     return columnNumber;
 }
 
-QRect QTileLayout::tileRect(int row, int column) const
-{
+QRect QTileLayout::tileRect(int row, int column) const {
     return tileMap[row][column]->rect();
 }
 
-int QTileLayout::rowsMinimumHeight() const
-{
+int QTileLayout::rowsMinimumHeight() const {
     return minVerticalSpan;
 }
 
-int QTileLayout::columnsMinimumWidth() const
-{
+int QTileLayout::columnsMinimumWidth() const {
     return minHorizontalSpan;
 }
 
-void QTileLayout::setRowsMinimumHeight(int height)
-{
+void QTileLayout::setRowsMinimumHeight(int height) {
     minVerticalSpan = height;
     if (minVerticalSpan > verticalSpan) {
         verticalSpan = minVerticalSpan;
@@ -384,6 +343,7 @@ void QTileLayout::unLinkLayout(QTileLayout *layout)
 
 void QTileLayout::highlightTiles(QPoint direction, int fromRow, int fromColumn, int tileNumber)
 {
+
     Tile *tile = tileMap[fromRow][fromColumn];
     QList<QPoint> tilesToMerge;
     bool increase;
@@ -399,6 +359,7 @@ void QTileLayout::highlightTiles(QPoint direction, int fromRow, int fromColumn, 
 
 void QTileLayout::resizeTile(QPoint direction, int fromRow, int fromColumn, int tileNumber)
 {
+
     Tile *tile = tileMap[fromRow][fromColumn];
     QList<QPoint> tilesToMerge;
     bool increase;
@@ -419,57 +380,63 @@ void QTileLayout::resizeTile(QPoint direction, int fromRow, int fromColumn, int 
     }
 }
 
-Tile* QTileLayout::hardSplitTiles(int fromRow, int fromColumn, QList<QPoint> tilesToSplit)
-{
-    // Q_ASSERT(tilesToSplit.contains(QPoint(fromRow, fromColumn)));
-    if (tilesToSplit.contains(QPoint(fromRow, fromColumn)))
+// Splits the tiles and return the new one at (fromRow, fromColumn)
+Tile* QTileLayout::hardSplitTiles(int fromRow, int fromColumn, QList<QPoint> tilesToSplit) {
+    Q_ASSERT(tilesToSplit.contains(QPoint(fromRow, fromColumn)));
+    // if (tilesToSplit.contains(QPoint(fromRow, fromColumn)))
     {
-        QSet<Tile*> tilesToRecycle;
+        QSet<Tile*> tilesToRecycle = {};
 
         for (const QPoint &point : qAsConst(tilesToSplit)) {
             tilesToRecycle.insert(tileMap[point.x()][point.y()]);
-            createTile(point.x(), point.y(), true);
+            createTile(point.x(), point.y(), 1, 1, true);
         }
 
         for (Tile *tile : qAsConst(tilesToRecycle)) {
-            removeWidget(tile);
+            QGridLayout::removeWidget(tile);
             tile->deleteLater();
         }
 
         Tile *tile = tileMap[fromRow][fromColumn];
-        addWidget(tile, fromRow, fromColumn);
+        QGridLayout::addWidget(tile, fromRow, fromColumn);
         return tile;
     }
-
 }
 
-bool QTileLayout::isAreaEmpty(int fromRow, int fromColumn, int rowSpan, int columnSpan, QString color)
-{
-    // if (tileMap.isEmpty())
-    //     return true;
-    if (!color.isEmpty()) {
+// Checks if the given space is free from widgets
+bool QTileLayout::isAreaEmpty(int fromRow, int fromColumn, int rowSpan, int columnSpan, QString color) {
+    bool isEmpty = true;
+
+    if (!color.isEmpty() && colorMap.contains(color)) {
         changeTilesColor(color);
     }
-    if ((fromRow + rowSpan > rowNumber) || (fromColumn + columnSpan > columnNumber) || (fromRow < 0) || (fromColumn < 0)) {
-        return false;
-    }
 
-    for (int row = 0; row < rowSpan; ++row) {
-        for (int column = 0; column < columnSpan; ++column) {
-            if (tileMap[fromRow + row][fromColumn + column]->isFilled()) {
-                return false;
+    if ((fromRow + rowSpan > rowNumber) || (fromColumn + columnSpan > columnNumber) || (fromRow < 0) || (fromColumn < 0)) {
+        isEmpty = false;
+    }
+    else
+    {
+        for (int row = 0; row < rowSpan; ++row) {
+            for (int column = 0; column < columnSpan; ++column) {
+                if (tileMap[fromRow + row][fromColumn + column]->isFilled()) {
+                    isEmpty = false;
+                    break;
+                }
+            }
+            if (!isEmpty) {
+                break;
             }
         }
     }
 
-    if (!color.isEmpty()) {
+    if (isEmpty && !color.isEmpty() && colorMap.contains(color)) {
         changeTilesColor("empty_check", QPoint(fromRow, fromColumn), QPoint(rowSpan, columnSpan));
     }
-    return true;
+
+    return isEmpty;
 }
 
-QWidget* QTileLayout::getWidgetToDrop()
-{
+QWidget* QTileLayout::getWidgetToDrop() {
     QWidget *widget = widgetToDrop;
     widgetToDrop = nullptr;
     return widget;
@@ -477,16 +444,17 @@ QWidget* QTileLayout::getWidgetToDrop()
 
 void QTileLayout::setWidgetToDrop(QWidget *widget)
 {
+
     widgetToDrop = widget;
 }
 
-void QTileLayout::changeTilesColor(QString colorChoice, QPoint fromTile, QPoint toTile)
-{
-    QPalette palette;
-    palette.setColor(QPalette::Window, colorMap.value(colorChoice));
-    QPalette paletteIdle;
-    paletteIdle.setColor(QPalette::Window, colorMap.value("idle"));
-    QPoint toTileAdjusted = toTile == QPoint() ? QPoint(rowNumber, columnNumber) : toTile;
+// Changes the color of all tiles
+void QTileLayout::changeTilesColor(QString colorChoice, QPoint fromTile, QPoint toTile) {
+    QPalette * palette = new QPalette();
+    palette->setColor(QPalette::Window, colorMap.value(colorChoice));
+    QPalette * paletteIdle = new QPalette();
+    paletteIdle->setColor(QPalette::Window, colorMap.value("idle"));
+    QPoint toTileAdjusted = toTile.isNull() ? QPoint(rowNumber, columnNumber) : toTile;
 
     for (int row = fromTile.x(); row < fromTile.x() + toTileAdjusted.x(); ++row)
     {
@@ -494,28 +462,31 @@ void QTileLayout::changeTilesColor(QString colorChoice, QPoint fromTile, QPoint 
         {
             if (!tileMap[row][column]->isFilled())
             {
-                tileMap[row][column]->changeColor(palette);
+                tileMap[row][column]->changeColor(*palette);
             }
             else
             {
-                tileMap[row][column]->changeColor(paletteIdle);
+                tileMap[row][column]->changeColor(*paletteIdle);
             }
         }
     }
 }
 
-QVector<int> QTileLayout::flattenList(const QVector<QVector<int>>& toFlatten) {
-    QVector<int> flattenedList;
-    for (const auto& sublist : toFlatten) {
-        for (int element : sublist) {
-            flattenedList.push_back(element);
+// returns a 1D list given a 2D list
+QList<QVariant> QTileLayout::flattenList(const QList<QList<QVariant>>& toFlatten) {
+    QList<QVariant> flattenedList;
+    for (const auto& aList : toFlatten) {
+        for (const auto& item : aList) {
+            flattenedList.append(item);
         }
     }
     return flattenedList;
 }
 
+// Update the size of the layout
 void QTileLayout::updateGlobalSize(QResizeEvent *newSize)
 {
+
     int verticalMargins = contentsMargins().top() + contentsMargins().bottom();
     int horizontalMargins = contentsMargins().left() + contentsMargins().right();
 
@@ -532,33 +503,39 @@ void QTileLayout::updateGlobalSize(QResizeEvent *newSize)
     updateAllTiles();
 }
 
+// Merges the tilesToMerge with tile
 void QTileLayout::mergeTiles(Tile *tile, int fromRow, int fromColumn, int rowSpan, int columnSpan, QList<QPoint> tilesToMerge)
 {
+
     for (const QPoint &point : std::as_const(tilesToMerge)) {
-        removeWidget(tileMap[point.x()][point.y()]);
-        delete tileMap[point.x()][point.y()];
+        // if (tileMap[point.x()][point.y()])
+        {
+            QGridLayout::removeWidget(tileMap[point.x()][point.y()]);
+            delete tileMap[point.x()][point.y()];
+        }
         tileMap[point.x()][point.y()] = tile;
     }
 
-    removeWidget(tile);
-    addWidget(tile, fromRow, fromColumn, rowSpan, columnSpan);
+    QGridLayout::removeWidget(tile);
+    QGridLayout::addWidget(tile, fromRow, fromColumn, rowSpan, columnSpan);
     tile->updateSize(fromRow, fromColumn, rowSpan, columnSpan);
 }
 
-void QTileLayout::splitTiles(Tile *tile, int fromRow, int fromColumn, int rowSpan, int columnSpan, QList<QPoint> tilesToSplit)
-{
+// Splits the tilesToSplit from tile
+void QTileLayout::splitTiles(Tile *tile, int fromRow, int fromColumn, int rowSpan, int columnSpan, QList<QPoint> tilesToSplit) {
+
     for (const QPoint &point : std::as_const(tilesToSplit)) {
-        createTile(point.x(), point.y(), true);
+        createTile(point.x(), point.y(), 1, 1,  true);
     }
 
-    removeWidget(tile);
-    addWidget(tile, fromRow, fromColumn, rowSpan, columnSpan);
+    QGridLayout::removeWidget(tile);
+    QGridLayout::addWidget(tile, fromRow, fromColumn, rowSpan, columnSpan);
     tile->updateSize(fromRow, fromColumn, rowSpan, columnSpan);
 }
 
-Tile* QTileLayout::createTile(int fromRow, int fromColumn, int rowSpan, int columnSpan, bool updateTileMap)
-// QSharedPointer<Tile> QTileLayout::createTile(int fromRow, int fromColumn, int rowSpan, int columnSpan, bool updateTileMap)
-{
+// Creates a tile: a tile is basically a place holder that can contain a widget or not
+Tile* QTileLayout::createTile(int fromRow, int fromColumn, int rowSpan, int columnSpan, bool updateTileMap) {
+
     Tile *tile = new Tile(
         this,
         fromRow,
@@ -569,13 +546,20 @@ Tile* QTileLayout::createTile(int fromRow, int fromColumn, int rowSpan, int colu
         horizontalSpan
         );
 
-    addWidget(tile, fromRow, fromColumn);
+    QGridLayout::addWidget(tile, fromRow, fromColumn, rowSpan, columnSpan);
 
     if (updateTileMap) {
-        for (int row = 0; row < verticalSpan; ++row) {
-            for (int column = 0; column < horizontalSpan; ++column) {
-                tileMap[fromRow + row][fromColumn + column] = tile;
+        QVector<QPoint> tilePositions;
+        for (int row = 0; row < rowSpan; ++row) {
+            for (int column = 0; column < columnSpan; ++column) {
+                tilePositions.append(QPoint(fromRow + row, fromColumn + column));
             }
+        }
+
+        for (const auto& position : tilePositions) {
+            int row = position.x();
+            int column = position.y();
+            tileMap[row][column] = tile;
         }
     }
 
@@ -616,21 +600,20 @@ std::tuple<QList<QPoint>, bool, int, int, int, int> QTileLayout::getTilesToBeRes
     return std::make_tuple(tilesToMerge, increase, fromRow, fromColumn, rowSpan, columnSpan);
 }
 
-
+// Finds the tiles to split when a tile is decreased
 std::tuple<int, QList<QPoint> > QTileLayout::getTilesToSplit(QPoint direction, int fromRow, int fromColumn, int tileNumber) {
-    // Finds the tiles to split when a tile is decreased
     Tile* tile = tileMap[fromRow][fromColumn];
     int rowSpan = tile->getRowSpan();
     int columnSpan = tile->getColumnSpan();
     int dirX = direction.x();
     int dirY = direction.y();
 
-    int newTileNumber = (tileNumber <= -tileNumber * (dirX + dirY) < columnSpan * (dirX != 0) + rowSpan * (dirY != 0)) ?
-                            tileNumber : (1 - columnSpan) * dirX + (1 - rowSpan) * dirY;
+    int newTileNumber = (tileNumber <= (-tileNumber * (dirX + dirY)) < (columnSpan * (dirX != 0)) + (rowSpan * (dirY != 0))) ?
+                            tileNumber : ((1 - columnSpan) * dirX) + ((1 - rowSpan) * dirY);
 
     QList<QPoint> tilesToMerge;
-    for (int row = -newTileNumber * dirY + rowSpan * (dirX != 0); row > 0; --row) {
-        for (int column = -newTileNumber * dirX + columnSpan * (dirY != 0); column > 0; --column) {
+    for (int row = (-newTileNumber * dirY) + (rowSpan * (dirX != 0)); row > 0; --row) {
+        for (int column = (-newTileNumber * dirX) + (columnSpan * (dirY != 0)); column > 0; --column) {
             tilesToMerge.append(QPoint(fromRow + row + (rowSpan - 2 * row - 1) * (dirY == 1),
                                        fromColumn + column + (columnSpan - 2 * column - 1) * (dirX == 1)));
         }
@@ -639,8 +622,8 @@ std::tuple<int, QList<QPoint> > QTileLayout::getTilesToSplit(QPoint direction, i
     return std::make_tuple(newTileNumber, tilesToMerge);
 }
 
+// Finds the tiles to merge when a tile is increased
 std::tuple<int, QList<QPoint>> QTileLayout::getTilesToMerge(QPoint direction, int fromRow, int fromColumn, int tileNumber) {
-    // Trova i tile da unire quando un tile viene ingrandito
     Tile* tile = tileMap[fromRow][fromColumn];
     int rowSpan = tile->getRowSpan();
     int columnSpan = tile->getColumnSpan();
@@ -648,15 +631,18 @@ std::tuple<int, QList<QPoint>> QTileLayout::getTilesToMerge(QPoint direction, in
     QList<QPoint> tilesToMerge;
     int dirX = direction.x();
     int dirY = direction.y();
-    int newTileNumber; // Nuova variabile per memorizzare tileNumber
 
-    newTileNumber = (dirX + dirY == -1) ?
-                        std::max(tileNumber, -fromColumn * (dirX != 0) - fromRow * (dirY != 0)) :
-                        std::min(tileNumber, ((columnNumber - fromColumn - columnSpan) * (dirX != 0) + (rowNumber - fromRow - rowSpan) * (dirY != 0)));
+    if (dirX + dirY == -1) {
+        tileNumber = qMax(tileNumber, -fromColumn * (dirX != 0) - fromRow * (dirY != 0));
+    } else {
+        int minTileNumber = ((columnNumber - fromColumn - columnSpan) * (dirX != 0) +
+                             (rowNumber - fromRow - rowSpan) * (dirY != 0));
+        tileNumber = qMin(tileNumber, minTileNumber);
+    }
 
     // Ovest o Est
     if (dirX != 0) {
-        for (int column = 0; column < newTileNumber * dirX; ++column) {
+        for (int column = 0; column < tileNumber * dirX; ++column) {
             QList<QPoint> tilesToCheck;
             int columnDelta = (columnSpan + column) * (dirX == 1) + (-column - 1) * (dirX == -1);
             for (int row = 0; row < rowSpan; ++row) {
@@ -671,7 +657,7 @@ std::tuple<int, QList<QPoint>> QTileLayout::getTilesToMerge(QPoint direction, in
     }
     // Nord o Sud
     else {
-        for (int row = 0; row < newTileNumber * dirY; ++row) {
+        for (int row = 0; row < tileNumber * dirY; ++row) {
             QList<QPoint> tilesToCheck;
             int rowDelta = (rowSpan + row) * (dirY == 1) + (-row - 1) * (dirY == -1);
             for (int column = 0; column < columnSpan; ++column) {
@@ -688,9 +674,8 @@ std::tuple<int, QList<QPoint>> QTileLayout::getTilesToMerge(QPoint direction, in
 }
 
 
-
+// Creates a map to be able to locate each tile on the grid
 void QTileLayout::createTileMap() {
-    // Crea la mappa dei tile per localizzare ciascun tile sulla griglia
     for (int row = 0; row < rowNumber; ++row) {
         QList<Tile*> rowTiles;
         for (int column = 0; column < columnNumber; ++column) {
@@ -701,55 +686,46 @@ void QTileLayout::createTileMap() {
     }
 }
 
-void QTileLayout::updateAllTiles()
-{
-    if (!tileMap.isEmpty())
-    {
+// Forces the tiles to update their geometry
+void QTileLayout::updateAllTiles() {
+    if (!tileMap.isEmpty()) {
         for (int row = 0; row < rowNumber; ++row) {
             for (int column = 0; column < columnNumber; ++column) {
-                tileMap[row][column]->updateSize(row, column, verticalSpan, horizontalSpan);
+                tileMap[row][column]->updateSize(row, column, -1, -1, verticalSpan, horizontalSpan);
             }
         }
     }
 }
 
-QMap<QUuid, QTileLayout *> QTileLayout::getLinkedLayout() const
-{
+QMap<QUuid, QTileLayout *> QTileLayout::getLinkedLayout() const {
     return linkedLayout;
 }
 
-Qt::CursorShape QTileLayout::getCursorResizeVertical() const
-{
+Qt::CursorShape QTileLayout::getCursorResizeVertical() const {
     return cursorResizeVertical;
 }
 
-Qt::CursorShape QTileLayout::getCursorResizeHorizontal() const
-{
+Qt::CursorShape QTileLayout::getCursorResizeHorizontal() const {
     return cursorResizeHorizontal;
 }
 
-Qt::CursorShape QTileLayout::getCursorGrab() const
-{
+Qt::CursorShape QTileLayout::getCursorGrab() const {
     return cursorGrab;
 }
 
-Qt::CursorShape QTileLayout::getCursorIdle() const
-{
+Qt::CursorShape QTileLayout::getCursorIdle() const {
     return cursorIdle;
 }
 
-bool QTileLayout::getFocus() const
-{
+bool QTileLayout::getFocus() const {
     return focus;
 }
 
-bool QTileLayout::getResizable() const
-{
+bool QTileLayout::getResizable() const {
     return resizable;
 }
 
-bool QTileLayout::getDragAndDrop() const
-{
+bool QTileLayout::getDragAndDrop() const {
     return dragAndDrop;
 }
 
