@@ -757,3 +757,57 @@ bool QTileLayout::getDragAndDrop() const {
 //     }
 //     return tiles;
 // }
+void QTileLayout::reorderWidgets(const QByteArray &mimeData, int targetRow, int targetColumn) {
+    // Get all widgets and tiles
+    QList<QWidget*> widgets = widgetTileCouple["widget"];
+    QList<QWidget*> tiles = widgetTileCouple["tile"];
+    
+    // Create pairs for sorting
+    QList<QPair<int, QWidget*>> sortedWidgets;
+    for (int i = 0; i < widgets.size(); ++i) {
+        Tile* tile = dynamic_cast<Tile*>(tiles[i]);
+        if (tile) {
+            int pos = tile->getFromRow() * columnNumber + tile->getFromColumn();
+            sortedWidgets.append(qMakePair(pos, widgets[i]));
+        }
+    }
+    
+    // Sort by position to ensure flow order
+    std::sort(sortedWidgets.begin(), sortedWidgets.end(), [](const QPair<int, QWidget*> &a, const QPair<int, QWidget*> &b) {
+        return a.first < b.first;
+    });
+    
+    // Detach all widgets
+    for (int i = 0; i < tiles.size(); ++i) {
+        Tile* tile = dynamic_cast<Tile*>(tiles[i]);
+        if (tile) {
+            tile->releaseWidget();
+        }
+    }
+    
+    // Clear lists
+    widgetTileCouple["widget"].clear();
+    widgetTileCouple["tile"].clear();
+    
+    // Re-add widgets
+    int widgetIndex = 0;
+    for (int row = 0; row < rowNumber; ++row) {
+        for (int column = 0; column < columnNumber; ++column) {
+            // Skip the target tile if valid
+            if (targetRow != -1 && targetColumn != -1 && row == targetRow && column == targetColumn) {
+                continue;
+            }
+            
+            if (widgetIndex < sortedWidgets.size()) {
+                QWidget* widget = sortedWidgets[widgetIndex].second;
+                Tile* tile = tileMap[row][column];
+                
+                tile->addWidget(widget);
+                widgetTileCouple["widget"].append(widget);
+                widgetTileCouple["tile"].append(tile);
+                
+                widgetIndex++;
+            }
+        }
+    }
+}

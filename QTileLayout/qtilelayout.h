@@ -54,6 +54,7 @@ public:
     QWidget* getWidgetToDrop();
     void setWidgetToDrop(QWidget *widget);
     void changeTilesColor(QString colorChoice, QPoint fromTile = QPoint(0, 0), QPoint toTile = QPoint());
+    void reorderWidgets(const QByteArray &mimeData, int targetRow, int targetColumn);
 
     bool getDragAndDrop() const;
     bool getResizable() const;

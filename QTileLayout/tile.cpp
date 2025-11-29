@@ -204,7 +204,15 @@ void Tile::mouseReleaseEvent(QMouseEvent *event) {
 }
 
 void Tile::dragEnterEvent(QDragEnterEvent *event) {
-    if (tileLayout->getDragAndDrop() && event->mimeData()->hasFormat("TileData") && isDropPossible(event)) {
+    if (tileLayout->getDragAndDrop() && event->mimeData()->hasFormat("TileData")) {
+        event->acceptProposedAction();
+    }
+}
+
+void Tile::dragMoveEvent(QDragMoveEvent *event) {
+    if (tileLayout->getDragAndDrop() && event->mimeData()->hasFormat("TileData")) {
+        // Trigger reordering preview here
+        tileLayout->reorderWidgets(event->mimeData()->data("TileData"), fromRow, fromColumn);
         event->acceptProposedAction();
     }
 }
@@ -296,17 +304,14 @@ void Tile::dragAndDropProcess(QDrag *drag) {
         }
     }
 
-    if (drag->exec() == Qt::IgnoreAction) {
-        // If the drag was ignored, we need to put the widget back.
-        // We use the saved local variables because 'this' might be deleted or invalid if we rely on member access after removeWidget (though here we are in the same scope, removeWidget might have triggered deletion if not for the fact we are in a method of the object... wait, removeWidget calls deleteLater() on the tile? 
-        // In QTileLayout::removeWidget:
-        // tileMap[row][column]->deleteLater();
-        // So yes, 'this' is scheduled for deletion. Accessing members is risky if the event loop spins. drag->exec() spins the event loop.
+    int result = drag->exec();
+
+    if (result == Qt::IgnoreAction) {
+        // Drag cancelled: restore layout
+        // Reorder to open gap at original position
+        previousTileLayout->reorderWidgets(QByteArray(), previousFromRow, previousFromColumn);
         
         QWidget *widgetNew = previousTileLayout->getWidgetToDrop();
-        // If widgetNew is null, it might mean it was dropped somewhere else or something happened. 
-        // But here we are in IgnoreAction, so it wasn't accepted.
-        
         if (!widgetNew) widgetNew = previousWidget;
 
         previousTileLayout->addWidget(
@@ -319,6 +324,11 @@ void Tile::dragAndDropProcess(QDrag *drag) {
         if (previousTileLayout->getFocus()) {
             widgetNew->setFocus();
         }
+    } else {
+        // Drag completed (MoveAction): close any gaps
+        // If dropped in same layout, this sorts the list correctly.
+        // If dropped in other layout, this closes the gap in the old layout.
+        previousTileLayout->reorderWidgets(QByteArray(), -1, -1);
     }
 
     if (self) {
@@ -389,6 +399,14 @@ void Tile::removeWidget() {
     delete widget;
     widget = nullptr;
     filled = false;
+}
+
+void Tile::releaseWidget() {
+    if (widget) {
+        layout->removeWidget(widget);
+        widget = nullptr;
+        filled = false;
+    }
 }
 
 // Refreshes the tile size limit
