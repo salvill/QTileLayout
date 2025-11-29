@@ -27,6 +27,7 @@ public:
     int getFromColumn() const;
     int getRowSpan() const;
     int getColumnSpan() const;
+    QString getInfo();
     bool isFilled() const;
     void changeColor(const QPalette &color);
 
@@ -49,7 +50,7 @@ private:
     int resizeMargin;
     bool filled;
     QWidget *widget;
-    QPoint *mouseMovePos;
+    QPoint mouseMovePos;
     QVBoxLayout *layout;
     QPoint lock;
     bool dragInProcess;

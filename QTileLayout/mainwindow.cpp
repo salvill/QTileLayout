@@ -85,7 +85,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         }
     }
 
-    tile_layout->addWidget(spawnWidget(), row_number - 2, 1, 2, 2);
+    // tile_layout->addWidget(spawnWidget(), row_number - 2, 1, 2, 2);
 
     Label* last_widget = spawnWidget();
     tile_layout->addWidget(last_widget, row_number - 1, 0, 1, 1);

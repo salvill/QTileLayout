@@ -1,4 +1,5 @@
 #include "tile.h"
+#include <QPointer>
 #include "customshadoweffect.h"
 #include "qtilelayout.h"
 #include <QDebug>
@@ -25,7 +26,7 @@ Tile::Tile(QTileLayout *tileLayout, int fromRow, int fromColumn, int rowSpan, in
     this->layout->setSpacing(0);
     this->layout->setContentsMargins(0, 0, 0, 0);
 
-    this->mouseMovePos = nullptr;
+    this->mouseMovePos = QPoint();
     this->updateSizeLimit();
     this->setAcceptDrops(true);
     this->setMouseTracking(true);
@@ -74,6 +75,15 @@ int Tile::getColumnSpan() const {
     return columnSpan;
 }
 
+QString Tile::getInfo()
+{
+    return QString("TileInfo: FromRow %1, FromColumn %2, RowSpan %3, ColumnSpan %4")
+        .arg(fromRow)
+        .arg(fromColumn)
+        .arg(rowSpan)
+        .arg(columnSpan);
+}
+
 // Returns True if there is a widget in the tile, else False
 bool Tile::isFilled() const {
     return filled;
@@ -89,9 +99,9 @@ void Tile::changeColor(const QPalette &color) {
 void Tile::mouseMoveEvent(QMouseEvent *event) {
     if (event->buttons() == Qt::LeftButton) {
         // Adjust offset from clicked point to origin of widget
-        if (mouseMovePos && !dragInProcess && lock.isNull()) {
+        if (!mouseMovePos.isNull() && !dragInProcess && lock.isNull()) {
             QPoint globalPos = event->globalPos();
-            QPoint lastPos = mapToGlobal(*mouseMovePos);
+            QPoint lastPos = mapToGlobal(mouseMovePos);
             // Calculate the difference when moving the mouse
             QPoint diff = globalPos - lastPos;
 
@@ -147,7 +157,8 @@ void Tile::mouseMoveEvent(QMouseEvent *event) {
 // Actions to do when the mouse button is pressed
 void Tile::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {
-        mouseMovePos = new QPoint(event->pos());
+        // mouseMovePos = new QPoint(event->pos());
+        mouseMovePos = event->pos();
         if (event->pos().x() < resizeMargin && tileLayout->getResizable()) {
             lock = QPoint(-1, 0);  // 'west'
         }
@@ -161,12 +172,14 @@ void Tile::mousePressEvent(QMouseEvent *event) {
             lock = QPoint(0, 1);  // 'south'
         }
 
+        qDebug() << __FUNCTION__ << lock;
+
         if (!lock.isNull()) {
             tileLayout->changeTilesColor("resize");
         }
     } else {
-        delete mouseMovePos;
-        mouseMovePos = nullptr;
+        // delete mouseMovePos;
+        mouseMovePos = QPoint();
     }
 
     QWidget::mousePressEvent(event);
@@ -258,38 +271,61 @@ void Tile::dragAndDropProcess(QDrag *drag) {
     dragInProcess = true;
     int previousRowSpan = rowSpan;
     int previousColumnSpan = columnSpan;
+    int previousFromRow = fromRow;
+    int previousFromColumn = fromColumn;
+    QTileLayout* previousTileLayout = tileLayout;
+    QWidget* previousWidget = widget;
 
     tileLayout->setWidgetToDrop(widget);
     widget->clearFocus();
+    
+    // Use QPointer to track if 'this' is deleted
+    QPointer<Tile> self(this);
+
     tileLayout->removeWidget(widget);
-    setVisible(false);
+    
+    if (self) {
+        setVisible(false);
 
-    QMap<QUuid, QTileLayout *> mapTileLayout = tileLayout->getLinkedLayout();
+        QMap<QUuid, QTileLayout *> mapTileLayout = tileLayout->getLinkedLayout();
 
-    for (auto it = mapTileLayout.begin(); it != mapTileLayout.end(); ++it) {
-        if (it.value()->getDragAndDrop()) {
-            it.value()->changeTilesColor("drag_and_drop");
+        for (auto it = mapTileLayout.begin(); it != mapTileLayout.end(); ++it) {
+            if (it.value()->getDragAndDrop()) {
+                it.value()->changeTilesColor("drag_and_drop");
+            }
         }
     }
 
     if (drag->exec() == Qt::IgnoreAction) {
-        removeWidget();
-        QWidget *widget = tileLayout->getWidgetToDrop();
-        tileLayout->addWidget(
-            widget,
-            fromRow,
-            fromColumn,
+        // If the drag was ignored, we need to put the widget back.
+        // We use the saved local variables because 'this' might be deleted or invalid if we rely on member access after removeWidget (though here we are in the same scope, removeWidget might have triggered deletion if not for the fact we are in a method of the object... wait, removeWidget calls deleteLater() on the tile? 
+        // In QTileLayout::removeWidget:
+        // tileMap[row][column]->deleteLater();
+        // So yes, 'this' is scheduled for deletion. Accessing members is risky if the event loop spins. drag->exec() spins the event loop.
+        
+        QWidget *widgetNew = previousTileLayout->getWidgetToDrop();
+        // If widgetNew is null, it might mean it was dropped somewhere else or something happened. 
+        // But here we are in IgnoreAction, so it wasn't accepted.
+        
+        if (!widgetNew) widgetNew = previousWidget;
+
+        previousTileLayout->addWidget(
+            widgetNew,
+            previousFromRow,
+            previousFromColumn,
             previousRowSpan,
             previousColumnSpan
             );
-        if (tileLayout->getFocus()) {
-            widget->setFocus();
+        if (previousTileLayout->getFocus()) {
+            widgetNew->setFocus();
         }
     }
 
-    originTileLayout = tileLayout;
-    setVisible(true);
-    dragInProcess = false;
+    if (self) {
+        originTileLayout = tileLayout;
+        setVisible(true);
+        dragInProcess = false;
+    }
 }
 
 // Checks if this tile can accept the drop
@@ -341,7 +377,10 @@ int Tile::getResizeTileNumber(int x, int y) {
     int tileSpan = columnSpan * (dirX != 0) + rowSpan * (dirY != 0);
     int spacing = tileLayout->verticalSpacing() * (dirX != 0) + tileLayout->horizontalSpacing() * (dirY != 0);
 
-    return static_cast<int>((x * (dirX != 0) + y * (dirY != 0) + (span / 2) - span * tileSpan * ((dirX + dirY) == 1)) / (span + spacing));
+    int res = static_cast<int>((x * (dirX != 0) + y * (dirY != 0) + (span / 2) - span * tileSpan * ((dirX + dirY) == 1)) / (span + spacing));
+
+    qDebug() << "getResizeTileNumber: " << res;
+    return res;
 }
 
 // Removes the tile widget
